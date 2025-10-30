@@ -5,3 +5,9 @@ typedef struct {
     object_t func_environment;	/**< Сохраненное окружение функций */
     int last_protected;		/**< Сохраненное число временных объектов */
 } continuation_t;
+
+/// Объект - точка возврата
+typedef struct {
+    continuation_t buff; /**< Объект - продолжение */
+    object_t tag; /**< Сохраненный тег*/
+} catch_t;

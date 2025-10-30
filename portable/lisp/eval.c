@@ -57,10 +57,12 @@ object_t func_env = NULLOBJ;
 extern continuation_t tagbody_buffers[MAX_TAGBODY_SIZE];
 ///текущий индекс-буфер для tagbody
 extern int tb_index_buf;
+/// точка вычисления меток tagbody
+extern catch_t catch_buffers[MAX_CATCH_SIZE];
+///текущий индекс-буфер для tagbody
+extern int ct_index_buf;
 /// точка для возврата в цикл REPL
 jmp_buf repl_buf;
-/// точка возврата из catch
-jmp_buf catch_buf;
 ///текущая метка перехода go
 object_t cur_label = NULLOBJ;
 #ifdef DEBUG
@@ -438,7 +440,7 @@ object_t make_env(object_t args, object_t values)
 	    error("Missing parameter after &rest"); 
 	if (TAIL(TAIL(args)) != NULLOBJ)
 	    error("Too many parameters after &rest"); 
-	return new_pair(new_pair(SECOND(args), values), nil); 
+	return new_pair(new_pair(SECOND(args), values), nil);
     } 
     object_t val = FIRST(values); 
     object_t pair = new_pair(param, val); 
@@ -712,14 +714,9 @@ object_t eval(object_t obj, object_t env, object_t func)
 #ifdef DEBUG
     	debug_stack = new_pair(obj, debug_stack);
 #endif
-	int find = find_in_env(func, first, &res);
-	if (s->lambda == NULLOBJ && s->func == NULL && s->macro == NULLOBJ && !find)
+	if (s->lambda == NULLOBJ && s->func == NULL && s->macro == NULLOBJ && !find_in_env(func, first, &res))
 	    error("Unknown func: %s", s->str);
 	int args_count = list_length(TAIL(obj));
-	if (find) {
-	    s->nary = get_value(GET_ARRAY(res)->data[0]);
-	    s->count = get_value(GET_ARRAY(res)->data[1]);
-	}
 	if (s->nary == 0) {
 	    if (s->count != args_count)
 		error("%s: invalid arguments count", s->str);
@@ -733,8 +730,8 @@ object_t eval(object_t obj, object_t env, object_t func)
             args = eval_args(TAIL(obj), env, func);
 
         object_t result;
-        if (find)
-            result = eval_func(GET_ARRAY(res)->data[2], args, env, func);
+        if (find_in_env(func, first, &res))
+            result = eval_func(res, args, env, func);
         else if (s->lambda != NULLOBJ)
             result = eval_func(s->lambda, args, env, func);
         else if (s->func != NULL)
@@ -941,14 +938,27 @@ object_t go(object_t args)
 object_t catch(object_t list) 
 { 
     object_t obj; 
+
     if (list == NULLOBJ)
-	error("catch: no arguments");
+	    error("catch: no arguments");
+
     object_t first_param = eval(FIRST(list), current_env, func_env);
     object_t rest_params = TAIL(list);
-    if (setjmp(catch_buf) == 0)
+
+
+    catch_buffers[--ct_index_buf].buff.environment = current_env;
+    catch_buffers[ct_index_buf].buff.func_environment = func_env;
+    catch_buffers[ct_index_buf].buff.last_protected = last_protected;
+    catch_buffers[ct_index_buf].tag = tag;
+
+    if (ct_index_buf < 0)
+        error("tagbody: buffer haven't true length");
+
+    if (setjmp(catch_buffers[ct_index_buf].buff.buffer) == 0) {
         return progn(rest_params);
-    else
+    }
 	return cur_label;
+
 }
 
 /* 
@@ -956,11 +966,19 @@ object_t catch(object_t list)
  * @param args (имя блока, результат)
  */ 
 object_t throw(object_t tag, object_t res) 
-{ 
-    PROTECT1(res);
-    cur_label = res;
-    UNPROTECT;
-    longjmp(catch_buf, 1);
+{
+
+    for (int i = ct_index_buf; i < MAX_CATCH_SIZE; i++) {
+        if (catch_buffers[i].tag == tag) {
+            PROTECT1(res);
+            cur_label = res;
+            UNPROTECT;
+            ct_index_buf++;
+            longjmp(catch_buffers[i].buff, 1);
+        }
+    }
+    
+    error("throw: no catch with tag");
 } 
 
 /** 
@@ -983,20 +1001,18 @@ object_t labels(object_t forms, object_t body)
         first = FIRST(forms);
         if (TYPE(first) != PAIR || TYPE(SECOND(first)) != PAIR)
             error("labels: invalid function");
-	array_t *a = new_empty_array(3);          
+        func_env = new_pair(new_pair(FIRST(first), new_pair(NEW_SYMBOL("LAMBDA"), TAIL(first))), func_env);
 	name = GET_SYMBOL(FIRST(first));
 	list = SECOND(first);
 	rest = list_contains(list, rest_sym);
 	if (rest == -1) {
-	    a->data[0] = new_number(0);
-	    a->data[1] = new_number(list_length(list));
+	    name->nary = 0;
+	    name->count = list_length(list);
 	}
 	else {
-	    a->data[0] = new_number(1);
-	    a->data[1] = new_number(rest);
+	    name->nary = 1;
+	    name->count = rest;
 	}
-	a->data[2] = new_pair(NEW_SYMBOL("LAMBDA"), TAIL(first));
-	func_env = new_pair(new_pair(FIRST(first), NEW_OBJECT(ARRAY, a)), func_env);
 	forms = TAIL(forms);
     }
     object_t res = progn(body);
@@ -1018,7 +1034,7 @@ object_t function(object_t func)
 	symbol_t *s = find_symbol(GET_SYMBOL(func)->str);
 	object_t res;
 	if (find_in_env(func_env, func, &res)) // поиск локальной функции
-	    func = GET_ARRAY(res)->data[2];
+	    func = res;
 	else if (s->lambda != NULLOBJ) // если символ - пользовательская функция
 	    func = s->lambda;
 	else if (s->func != NULL) // если символ - примитив
