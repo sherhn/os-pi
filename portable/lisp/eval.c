@@ -935,13 +935,14 @@ object_t go(object_t args)
  *
  * @return 
  */
-object_t catch(object_t list) 
-{ 
-    object_t obj; 
+object_t catch(object_t list)
+{
+    object_t obj;
 
     if (list == NULLOBJ)
-	    error("catch: no arguments");
+        error("catch: no arguments");
 
+    PROTECT1(list);
     object_t first_param = eval(FIRST(list), current_env, func_env);
     object_t rest_params = TAIL(list);
 
@@ -949,15 +950,18 @@ object_t catch(object_t list)
     catch_buffers[--ct_index_buf].buff.environment = current_env;
     catch_buffers[ct_index_buf].buff.func_environment = func_env;
     catch_buffers[ct_index_buf].buff.last_protected = last_protected;
-    catch_buffers[ct_index_buf].tag = tag;
+    catch_buffers[ct_index_buf].tag = first_param;
 
     if (ct_index_buf < 0)
         error("tagbody: buffer haven't true length");
 
     if (setjmp(catch_buffers[ct_index_buf].buff.buffer) == 0) {
-        return progn(rest_params);
+        object_t res = progn(rest_params);
+        UNPROTECT;
+        return res;
     }
-	return cur_label;
+    UNPROTECT;
+    return cur_label;
 
 }
 
@@ -965,21 +969,19 @@ object_t catch(object_t list)
  * Выходит из динамического блока, созданного catch
  * @param args (имя блока, результат)
  */ 
-object_t throw(object_t tag, object_t res) 
+object_t throw(object_t tag, object_t res)
 {
 
     for (int i = ct_index_buf; i < MAX_CATCH_SIZE; i++) {
         if (catch_buffers[i].tag == tag) {
-            PROTECT1(res);
             cur_label = res;
-            UNPROTECT;
             ct_index_buf++;
-            longjmp(catch_buffers[i].buff, 1);
+            longjmp(catch_buffers[i].buff.buffer, 1);
         }
     }
-    
+
     error("throw: no catch with tag");
-} 
+}
 
 /** 
  * Определяет локальные функции (могут быть рекурсивными) и выполняет формы

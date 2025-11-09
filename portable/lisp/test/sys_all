@@ -528,6 +528,10 @@ echo "---Тесты CATCH---"
 sh sys_test "(CATCH)" "catch: no arguments"
 sh sys_test "(CATCH 'A)" "NIL"
 sh sys_test "(CATCH 'A 1 2 3)" "3"
+# вложенный catch-throw
+sh sys_test "(CATCH 'a (CATCH 'b (THROW 'a 1)))" "1"
+# ошибка: throw без соответствующего catch
+sh sys_test "(CATCH 'd 1)" "THROW: no catch with tag"
 
 echo "---Тесты PROGN---"
 sh sys_test "(PROGN)" "NIL"
