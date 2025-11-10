@@ -1,61 +1,62 @@
 ;; Вспомогательный предикат
 (defun is-lisp-symbol (sym)
   "Предикат проверки на особый символ"
-  (contains '(#\+ #\- #\* #\/ #\= #\_ #\& #\| #\< #\> #\%) sym))
+  (contains '(#\+ #\- #\* #\/ #\= #\_ #\& #\| #\< #\> #\% #\! #\^ #\~) sym))
 
-(defun parse-tnumber ()
-  "Разбор десятичного (возможно, отрицательного) или шестнадцатеричного числа"
-  (parse-or (parse-hex) (parse-decimal)))
+(defun lisp-separator (sym)
+  "Разделители в Лиспе"
+  (contains (list (code-char 9) (code-char 10) #\  (code-char 0xa)) sym))
 
-(defun parse-tsymbol ()
+(defun lisp-symbol ()
   "Разбор символа (идентификатора)"
   (parse-app
-    (&&& (skip-spaces)
-         (parse-or (parse-pred #'is-alpha)
+    (&&& (parse-or (parse-pred #'is-alpha)
                    (parse-pred #'is-lisp-symbol))
          (parse-many (parse-or (parse-pred #'is-alpha)
                                (parse-pred #'is-digit)
                                (parse-pred #'is-lisp-symbol))))
     #'(lambda (parts)
         (intern (implode (map #'(lambda (char) (toupper char))
-                              (cons (second parts) (third parts))))))))
+                              (cons (car parts) (second parts))))))))
 
-;; (defun parse-tchar ()
-;;   "Разбор символа вида #\\a"
-;;   (parse-app
-;;     (&&& (skip-spaces)
-;;          (parse-elem #\#)
-;;          (parse-elem #\\)
-;;          (parse-pred #'(lambda (sym) t)))
-;;     #'fourth))
+(defun parse-escape (char value)
+  "Разбор экранированной последовательности"
+  (parse-app
+    (&&& (parse-elem #\\) (parse-elem char))
+    #'(lambda (parts) (list value))))
 
-;; (defun parse-tfunction ()
-;;   "Разбор функции вида #'name"
-;;   (parse-app
-;;     (&&& (skip-spaces)
-;;          (parse-elem #\#)
-;;          (parse-elem #\')
-;;          (parse-s))  ; ← зависит от parse-s (циклическая зависимость — допустима)
-;;     #'(lambda (parts) (list 'FUNCTION (fourth parts)))))
+(defun parse-string ()
+  "Разбор строки в двойных кавычках"
+  (parse-app
+    (&&& (parse-elem #\")
+         (parse-many (parse-or (parse-escape #\n (code-char 0xa))
+                               (parse-pred #'(lambda (sym) (!= sym #\")))))
+         (parse-elem #\"))
+    #'(lambda (parts) (implode (second parts)))))
 
-;; (defun parse-escape (char value)
-;;   "Разбор экранированной последовательности"
-;;   (parse-app
-;;     (&&& (parse-elem #\\) (parse-elem char))
-;;     #'(lambda (parts) (list value))))
+(defun lisp-token ()
+  "Лексема языка Лисп"
+  (parse-or (parse-elem #\()
+            (parse-elem #\))
+            (parse-hex)
+            (parse-decimal)
+;;            (parse-float)
+            (parse-string)
+	    (parse-app (&&& (parse-elem #\#) (parse-elem #\\) #'get-byte) #'third) ;; одиночный символ
+            (parse-app (&&& (parse-elem #\#) (parse-elem #\')) (parse-return 'FUNCTION))
+            (parse-app (parse-elem #\#) (parse-return 'SHARP))
+            (parse-app (parse-elem #\') (parse-return 'QUOTE))
+            (parse-app (parse-elem #\`) (parse-return 'BACKQUOTE))
+            (parse-app (&&& (parse-elem #\,) (parse-elem #\@)) (parse-return 'COMMA-AT))
+            (parse-app (parse-elem #\,) (parse-return 'COMMA))
+            (parse-elem #\.)
+            (lisp-symbol)
+	    ;;            #'(lambda (stream) (throw 'parse-error "Unknown token"))))
+	    ))
 
-;; (defun parse-tstring ()
-;;   "Разбор строки в двойных кавычках"
-;;   (parse-app
-;;     (&&& (skip-spaces)
-;;          (parse-elem #\")
-;;          (parse-many (parse-or (parse-escape #\n (code-char 0xa))
-;;                                (parse-pred #'(lambda (sym) (!= sym #\")))))
-;;          (parse-elem #\"))
-;;     #'(lambda (parts) (implode (third parts)))))
-
-;; (defun parse-tarray ()
-;;   "Разбор массива #(...)"
-;;   (parse-app
-;;     (&&& (parse-elem #\#) (parse-list))
-;;     #'(lambda (parts) (list-to-array (second parts)))))
+(defun lisp-lexer (str)
+  "Лексический анализатор Common Lisp. Строка преобразуется в список лексем"
+  (let ((r (catch 'parse-error
+	     (funcall (parse-sep (lisp-token) (parse-many (parse-pred #'lisp-separator)))
+		      (stream-from-str str)))))
+    (if r (car r) nil)))

@@ -938,7 +938,10 @@ object_t go(object_t args)
 object_t catch(object_t list)
 {
     object_t obj;
+<<<<<<< HEAD
     object_t res;
+=======
+>>>>>>> eb242cef317b20553a7946bf3debe256ae032137
 
     if (list == NULLOBJ)
         error("catch: no arguments");
@@ -956,12 +959,22 @@ object_t catch(object_t list)
     if (ct_index_buf < 0)
         error("catch: buffer haven't true length");
 
+<<<<<<< HEAD
     if (setjmp(catch_buffers[ct_index_buf].buff.buffer) == 0)
         res = progn(rest_params);
     else 
         res = cur_label;
     UNPROTECT;
     return res;
+=======
+    if (setjmp(catch_buffers[ct_index_buf].buff.buffer) == 0) {
+        object_t res = progn(rest_params);
+        UNPROTECT;
+        return res;
+    }
+    UNPROTECT;
+    return cur_label;
+>>>>>>> eb242cef317b20553a7946bf3debe256ae032137
 
 }
 
@@ -978,6 +991,10 @@ object_t throw(object_t tag, object_t res)
             longjmp(catch_buffers[i].buff.buffer, 1);
         }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> eb242cef317b20553a7946bf3debe256ae032137
     error("throw: no catch with tag");
 }
 
