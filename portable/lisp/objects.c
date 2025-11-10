@@ -99,7 +99,7 @@ int tb_index_buf = 0;
 /// точка вычисления меток catch
 continuation_t catch_buffers[MAX_CATCH_SIZE];
 ///текущий индекс-буфер для catch
-int ct_index_buf = 0;
+int ct_index_buf;
 
 /**
  * Инициализация объектов
