@@ -531,11 +531,7 @@ sh sys_test "(CATCH 'A 1 2 3)" "3"
 # вложенный catch-throw
 sh sys_test "(CATCH 'a (CATCH 'b (THROW 'a 1)))" "1"
 # ошибка: throw без соответствующего catch
-<<<<<<< HEAD
 sh sys_test "(CATCH 'd (THROW 'd 2) 1)" "2"
-=======
-sh sys_test "(CATCH 'd 1)" "THROW: no catch with tag"
->>>>>>> eb242cef317b20553a7946bf3debe256ae032137
 
 echo "---Тесты PROGN---"
 sh sys_test "(PROGN)" "()"
