@@ -10,7 +10,7 @@
 #include <limits.h>
 #include "lexer.h"
 
-/// текущий символ
+ /// текущий символ
 char cur_symbol;
 /// текущий токен
 token_t token;
@@ -20,6 +20,10 @@ int boot_load = 0;
 char *boot_code;
 /// размер буфера символов symbol_buffer
 #define SYMBOL_BUFFER_SIZE 512
+/// размер буффера строк
+#define COLUMN_BUFFER_SIZE 8
+/// буфер колонок
+int column_buffer[COLUMN_BUFFER_SIZE];
 /// количество строк, выводимых для отладки
 #define NUM_DEBUG_LINES 5
 /// буфер символов из stdin
@@ -29,37 +33,57 @@ char symbol_buffer[SYMBOL_BUFFER_SIZE];
 int buffer_write_pos = 0;
 /// текущая позиция чтения из буфера symbol_buffer
 int buffer_read_pos = 0;
+/// текущ. строка
+int current_line = 1;
+/// текущ. столбец
+int current_column = 1;
+/// текущ. позиция буффера
+int column_pos = 0;
 
 void parser_error(char *str, ...);
 
-/** 
+/**
  * Считывает очередной символ из входного потока символов в глобальную переменную cur_symbol.
  */
 void get_cur_char()
 {
-    if (buffer_write_pos == buffer_read_pos) {
-	if (!boot_load)
-	    cur_symbol = getchar();
-	else
-	    cur_symbol = *boot_code++;
-	symbol_buffer[buffer_write_pos++] = cur_symbol;
-	buffer_read_pos = buffer_write_pos &= SYMBOL_BUFFER_SIZE - 1;
+	if (buffer_write_pos == buffer_read_pos) {
+		if (!boot_load)
+			cur_symbol = getchar();
+		else
+			cur_symbol = *boot_code++;
+		symbol_buffer[buffer_write_pos++] = cur_symbol;
+		buffer_read_pos = buffer_write_pos &= SYMBOL_BUFFER_SIZE - 1;
     } else {
-	cur_symbol = symbol_buffer[buffer_read_pos++];
-	buffer_read_pos &= SYMBOL_BUFFER_SIZE - 1;
-    }
-    //printf("get_cur_char: '%c' read=%d write=%d\n", cur_symbol, buffer_read_pos, buffer_write_pos);
+		cur_symbol = symbol_buffer[buffer_read_pos++];
+		buffer_read_pos &= SYMBOL_BUFFER_SIZE - 1;
+	}
+	current_column++;
+	if (cur_symbol == '\n') {
+		current_line++;
+		column_pos &= COLUMN_BUFFER_SIZE - 1;
+		column_buffer[column_pos++] = current_column;
+		current_column = 1;
+	}
+	//printf("get_cur_char: '%c' read=%d write=%d\n", cur_symbol, buffer_read_pos, buffer_write_pos);
 }
 
-/** 
+/**
  * Возращает символ назад в поток
  */
-void unget_cur_char() 
+void unget_cur_char()
 {
-    cur_symbol = symbol_buffer[(buffer_read_pos - 2) & SYMBOL_BUFFER_SIZE - 1];
-    --buffer_read_pos;
-    buffer_read_pos &= SYMBOL_BUFFER_SIZE - 1;
-    //printf("unget_cur_char: '%c' read=%d write=%d\n", cur_symbol, buffer_read_pos, buffer_write_pos);
+	cur_symbol = symbol_buffer[(buffer_read_pos - 2) & SYMBOL_BUFFER_SIZE - 1];
+	--buffer_read_pos;
+	buffer_read_pos &= SYMBOL_BUFFER_SIZE - 1;
+
+	if (!--current_column) {
+		current_column = column_buffer[(column_pos - 1) & COLUMN_BUFFER_SIZE - 1];
+		--column_pos;
+		--current_line;
+		column_pos &= COLUMN_BUFFER_SIZE - 1;
+	}
+	//printf("unget_cur_char: '%c' read=%d write=%d\n", cur_symbol, buffer_read_pos, buffer_write_pos);
 }
 
 /**
