@@ -159,6 +159,50 @@ object_t mul(object_t list)
 }
 
 /**
+ * Умножение obj1 и obj2
+ *
+ * @param obj1, obj2 - числа с плавающей точкой
+ *
+ * @return произведение
+ */
+object_t mul2_float(object_t obj1, object_t obj2)
+{
+	if (obj1 == NULLOBJ || obj2 == NULLOBJ)
+		error("mul2_float: missing argument");
+
+	float mul = 0.0f;
+
+	if (TYPE(obj1) == FLOAT && TYPE(obj2) == FLOAT)
+		mul = GET_FLOAT(obj1)->value * GET_FLOAT(obj2)->value;
+	else
+		error("mul: Not number");
+	return new_float(mul);
+}
+
+/**
+ * Умножение obj1 и obj2
+ *
+ * @param obj1, obj2 - числа
+ *
+ * @return произведение
+ */
+object_t mul2(object_t obj1, object_t obj2)
+{
+	if (obj1 == NULLOBJ || obj2 == NULLOBJ)
+		error("mul2: missing argument");
+
+	if (IS_NUMBER(obj1) && IS_NUMBER(obj2)) {
+		num = get_value(obj1) * get_value(obj2);
+	}
+	else if (TYPE(obj1) == FLOAT || TYPE(obj2) == FLOAT)
+		return mul2_float(obj1, obj2);
+	else
+		error("mul: Not number");
+
+		return new_number(num);
+}
+
+/**
  * Деление с плавающей точкой
  * 
  * @param first - делимое
